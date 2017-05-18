@@ -22,20 +22,13 @@
 #define BACKLOG 5
 #define MACHINENAMELENGTH 1024
 
-// temp
-void *get_in_addr(struct sockaddr *sa) {
-  return sa->sa_family == AF_INET
-    ? (void *) &(((struct sockaddr_in*)sa)->sin_addr)
-    : (void *) &(((struct sockaddr_in6*)sa)->sin6_addr);
-}
 
-/* Print IP Address */
-void printIPAddress(struct sockaddr *anAddress) {
+/* Print IPv4 Address */
+void printIPAddress(char *msg, struct sockaddr *anAddress) {
 	char IPAddr[INET_ADDRSTRLEN]; 
 	inet_ntop(anAddress->sa_family, &(((struct sockaddr_in*)anAddress)->sin_addr), IPAddr, sizeof IPAddr); 
-	printf(IPAddr);
+	printf("%s: %s\n", msg, IPAddr);
 }
-
 
 /* Prints name of computer server is running on */
 void printMachineName() {
@@ -127,7 +120,6 @@ int main() {
 	int newSocket; // New connections
 	struct sockaddr clientAddress; // client address information
 	socklen_t clientAddressLen;
-	char IPAddr[INET_ADDRSTRLEN]; 
 	
 	while(1) { // Accept Loop
 		clientAddressLen = sizeof clientAddress; 
@@ -136,9 +128,7 @@ int main() {
 			perror("Error on Accept");
 			exit(EXIT_FAILURE); 
 		}
-		inet_ntop(clientAddress.sa_family, get_in_addr(&clientAddress), IPAddr, sizeof IPAddr);
-        printf("server: got connection from %s\n", IPAddr);
-        printIPAddress(&clientAddress); 
+        printIPAddress("Client IP Address", &clientAddress); 
 	}
 	
 	/* --------------------- SEND AND RECV ------------------ */
