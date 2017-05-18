@@ -108,13 +108,18 @@ int main() {
 			exit(EXIT_FAILURE); 
 		}
         printIPAddress("Client IP Address", &clientAddress); 
+        
 	}
+	
+	
+	
+	
+	
+	
 	
 	/* --------------------- SEND AND RECV ------------------ */
 
-
-
-
+	
 	/* ------------------------- CLOSE ---------------------- */
 	
 

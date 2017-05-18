@@ -14,6 +14,7 @@
 #define MAXDATASIZE 100 // max number of bytes we can get at once 
 
 void printIPAddress(char *msg, struct sockaddr *anAddress); // Print IPv4 address in string form
+int sendAll(int sockfd, char * buff, int * len);
 
 /* ---------------------------------------------------------------------- */
 /* -------------------------------- MAIN -------------------------------- */
@@ -65,17 +66,14 @@ int main()
 
 	/* --------------------- SEND AND RECV ------------------ */
 	
-	int numbytes;  
-    char buf[MAXDATASIZE];
-    
-    if ((numbytes = recv(sockfd, buf, MAXDATASIZE-1, 0)) == -1) {
-        perror("recv");
-        exit(1);
-    }
+	char buffer[1024];
+	while( fgets(buffer, 1024, stdin) != NULL) {
+		int len = sizeof buffer;
+		if( sendAll(sockfd, buffer, &len) == -1) {
+			printf("Only sent %d bytes because of error\n", len);
+		} 
+	}
 
-    buf[numbytes] = '\0';
-
-    printf("client: received '%s'\n",buf);
 
 	/* ------------------------- CLOSE ---------------------- */
 
@@ -94,4 +92,22 @@ void printIPAddress(char *msg, struct sockaddr *anAddress) {
 	char IPAddr[INET_ADDRSTRLEN]; 
 	inet_ntop(anAddress->sa_family, &(((struct sockaddr_in*)anAddress)->sin_addr), IPAddr, sizeof IPAddr); 
 	printf("%s: %s\n", msg, IPAddr);
+}
+
+
+
+// Send all of buff through sockfd
+int sendAll(int sockfd, char * buff, int * len) {
+	int n;
+	int totalBytesToSend = strlen(buff);
+	int bytesSent = 0;
+	int bytesRemaining = totalBytesToSend;
+	while(bytesSent < totalBytesToSend) {
+		n = send(sockfd, buff + bytesSent, bytesRemaining, 0);
+		if( n == -1 ) { break; }
+		bytesSent += n;
+		bytesRemaining -=n;
+	}
+	*len = bytesSent; // holds total number bytes sent
+	return n==-1?-1:0;
 }
