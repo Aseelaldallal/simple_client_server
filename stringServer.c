@@ -29,6 +29,12 @@ void *get_in_addr(struct sockaddr *sa) {
     : (void *) &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
+/* Print IP Address */
+void printIPAddress(struct sockaddr *anAddress) {
+	char IPAddr[INET_ADDRSTRLEN]; 
+	inet_ntop(anAddress->sa_family, &(((struct sockaddr_in*)anAddress)->sin_addr), IPAddr, sizeof IPAddr); 
+	printf(IPAddr);
+}
 
 
 /* Prints name of computer server is running on */
@@ -119,7 +125,7 @@ int main() {
 	/* ------------------------ ACCEPT ---------------------- */
 	
 	int newSocket; // New connections
-	struct sockaddr_storage clientAddress; // client address information
+	struct sockaddr clientAddress; // client address information
 	socklen_t clientAddressLen;
 	char IPAddr[INET_ADDRSTRLEN]; 
 	
@@ -130,8 +136,9 @@ int main() {
 			perror("Error on Accept");
 			exit(EXIT_FAILURE); 
 		}
-		inet_ntop(clientAddress.ss_family, get_in_addr((struct sockaddr *)&clientAddress), IPAddr, sizeof IPAddr);
+		inet_ntop(clientAddress.sa_family, get_in_addr(&clientAddress), IPAddr, sizeof IPAddr);
         printf("server: got connection from %s\n", IPAddr);
+        printIPAddress(&clientAddress); 
 	}
 	
 	/* --------------------- SEND AND RECV ------------------ */
