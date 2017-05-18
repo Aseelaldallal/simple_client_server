@@ -23,35 +23,14 @@
 #define MACHINENAMELENGTH 1024
 
 
-/* Print IPv4 Address */
-void printIPAddress(char *msg, struct sockaddr *anAddress) {
-	char IPAddr[INET_ADDRSTRLEN]; 
-	inet_ntop(anAddress->sa_family, &(((struct sockaddr_in*)anAddress)->sin_addr), IPAddr, sizeof IPAddr); 
-	printf("%s: %s\n", msg, IPAddr);
-}
+void printIPAddress(char *msg, struct sockaddr *anAddress); // Print IPv4 address in string form
+void printMachineName(); // print name of machine server is running on
+void printPortNumber(int aSocket); // print port number associated with aSocket
 
-/* Prints name of computer server is running on */
-void printMachineName() {
-	char machineName[MACHINENAMELENGTH];
-	if(gethostname(machineName, sizeof(machineName)) != 0) {
-		perror("Can't get hostname"); 
-		exit(EXIT_FAILURE);
-	}
-	printf("SERVER_ADDRESS %s\n", machineName);   // machine name
-}
 
-/* Prints port associated with aSocket */
-void printPortNumber(int aSocket) {
-	struct sockaddr_in sockAddressInfo;
-    int sockAddressInfoLength;
-    sockAddressInfoLength = sizeof(sockAddressInfo);
-    if (getsockname(aSocket, (struct sockaddr *)&sockAddressInfo, &sockAddressInfoLength) == -1) {
-       perror("getsockname() failed");
-       exit(EXIT_FAILURE); 
-    }
-    printf("SERVER_PORT %d\n", (int) ntohs(sockAddressInfo.sin_port));
-}
-
+/* ---------------------------------------------------------------------- */
+/* -------------------------------- MAIN -------------------------------- */
+/* ---------------------------------------------------------------------- */
 
 int main() {
 	
@@ -145,4 +124,38 @@ int main() {
 }
 
 
+
+/* ---------------------------------------------------------------------- */
+/* ------------------------------- METHODS ------------------------------ */
+/* ---------------------------------------------------------------------- */
+
+
+/* Print IPv4 Address */
+void printIPAddress(char *msg, struct sockaddr *anAddress) {
+	char IPAddr[INET_ADDRSTRLEN]; 
+	inet_ntop(anAddress->sa_family, &(((struct sockaddr_in*)anAddress)->sin_addr), IPAddr, sizeof IPAddr); 
+	printf("%s: %s\n", msg, IPAddr);
+}
+
+/* Prints name of computer server is running on */
+void printMachineName() {
+	char machineName[MACHINENAMELENGTH];
+	if(gethostname(machineName, sizeof(machineName)) != 0) {
+		perror("Can't get hostname"); 
+		exit(EXIT_FAILURE);
+	}
+	printf("SERVER_ADDRESS %s\n", machineName);   // machine name
+}
+
+/* Prints port associated with aSocket */
+void printPortNumber(int aSocket) {
+	struct sockaddr_in sockAddressInfo;
+    int sockAddressInfoLength;
+    sockAddressInfoLength = sizeof(sockAddressInfo);
+    if (getsockname(aSocket, (struct sockaddr *)&sockAddressInfo, &sockAddressInfoLength) == -1) {
+       perror("getsockname() failed");
+       exit(EXIT_FAILURE); 
+    }
+    printf("SERVER_PORT %d\n", (int) ntohs(sockAddressInfo.sin_port));
+}
 
