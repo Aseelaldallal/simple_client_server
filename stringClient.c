@@ -1,5 +1,5 @@
 
-
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -10,12 +10,39 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <sys/queue.h>
 
-#define MAXDATASIZE 100 // max number of bytes we can get at once 
+#define MAXUSERINPUTSIZE 2000 
+
+/* ---------------------------------------------------------------------- */
+/* ------------------------------ FUNCTIONS ----------------------------- */
+/* ---------------------------------------------------------------------- */
 
 void printIPAddress(char *msg, struct sockaddr *anAddress); // Print IPv4 address in string form
-int sendAll(int sockfd, char * buff, int * len);
+int sendAll(int sockfd, char * buff);
+void * addUserInputToQueue();
+void * sendToServer(void * sockfd);
 
+/* ---------------------------------------------------------------------- */
+/* -------------------------- THREADS AND LOCKS ------------------------- */
+/* ---------------------------------------------------------------------- */
+
+pthread_mutex_t queueMutex;
+
+/* ---------------------------------------------------------------------- */
+/* -------------------------------- QUEUE ------------------------------- */
+/* ---------------------------------------------------------------------- */
+
+typedef struct BufferEntry {
+	STAILQ_ENTRY(BufferEntry) next;
+	char text[MAXUSERINPUTSIZE];
+} BufferEntry;
+
+typedef STAILQ_HEAD(BufferQueueHead, BufferEntry) BufferQueueHead;
+
+BufferEntry *np, *prevp;
+BufferQueueHead *bufferQHead;
+	
 /* ---------------------------------------------------------------------- */
 /* -------------------------------- MAIN -------------------------------- */
 /* ---------------------------------------------------------------------- */
@@ -25,6 +52,11 @@ int main()
 {
 	int status;
 
+	/* --------------------- INIT QUEUE --------------------- */
+	
+	bufferQHead = malloc(sizeof(BufferQueueHead));
+	STAILQ_INIT(bufferQHead); // empty list created
+	
 	/* --------------- CREATE addrinfo STRUCT --------------- */
 	
 	struct addrinfo hints, *serverInfo, *looper;
@@ -66,12 +98,30 @@ int main()
 
 	/* --------------------- SEND AND RECV ------------------ */
 	
-	char buffer[1024];
-	while( fgets(buffer, 1024, stdin) != NULL) {
-		int len = sizeof buffer;
-		if( sendAll(sockfd, buffer, &len) == -1) {
-			printf("Only sent %d bytes because of error\n", len);
-		} 
+	//~ char buffer[1024];
+	//~ while( fgets(buffer, 1024, stdin) != NULL) {
+		//~ int len = sizeof buffer;
+		//~ if( sendAll(sockfd, buffer, &len) == -1) {
+			//~ printf("Only sent %d bytes because of error\n", len);
+		//~ } 
+	//~ }
+	
+	pthread_t userInputHandlerThread, serverCommThread;
+	status = pthread_create( &userInputHandlerThread, NULL, addUserInputToQueue, NULL);
+	if (status != 0){
+		printf("ERROR; return code from pthread_create() is %d\n", status);
+        exit(EXIT_FAILURE);
+    }
+    
+    status = pthread_create( &serverCommThread, NULL, sendToServer, &sockfd);
+	if (status != 0){
+		printf("ERROR; return code from pthread_create() is %d\n", status);
+        exit(EXIT_FAILURE);
+    }
+    
+	for(;;) { // forever
+		
+
 	}
 
 
@@ -94,10 +144,39 @@ void printIPAddress(char *msg, struct sockaddr *anAddress) {
 	printf("%s: %s\n", msg, IPAddr);
 }
 
+// Keep on getting user input
+void * addUserInputToQueue() {
+	char input[MAXUSERINPUTSIZE];
+	while( fgets(input, MAXUSERINPUTSIZE, stdin) != NULL) {
+		pthread_mutex_lock(&queueMutex); // lock
+			np = malloc(sizeof(BufferEntry));
+			strcpy(np->text, input); 
+			STAILQ_INSERT_TAIL(bufferQHead, np, next);
+		pthread_mutex_unlock(&queueMutex); //unlock
+	}
+	return 0;
+}
+
+// Keep on sending queue elements to server
+void * sendToServer(void * sockfd) {
+	for(;;) { // forever
+		if(!STAILQ_EMPTY(bufferQHead)) {
+			char textToSend[MAXUSERINPUTSIZE];
+			int len = strlen(np->text);
+			strncpy(textToSend, np->text, len); 
+			int * sock = (int *)sockfd;
+			int asock = *sock;
+			sendAll(asock, textToSend);
+			pthread_mutex_lock(&queueMutex); // lock
+				STAILQ_REMOVE_HEAD(bufferQHead, next); 
+			pthread_mutex_unlock(&queueMutex); //unlock
+		}
+	}
+}
 
 
 // Send all of buff through sockfd
-int sendAll(int sockfd, char * buff, int * len) {
+int sendAll(int sockfd, char * buff) {
 	int n;
 	int totalBytesToSend = strlen(buff);
 	int bytesSent = 0;
@@ -108,6 +187,5 @@ int sendAll(int sockfd, char * buff, int * len) {
 		bytesSent += n;
 		bytesRemaining -=n;
 	}
-	*len = bytesSent; // holds total number bytes sent
 	return n==-1?-1:0;
 }

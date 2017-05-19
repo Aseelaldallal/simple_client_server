@@ -21,6 +21,7 @@
 #define PORT "0"
 #define BACKLOG 5
 #define MACHINENAMELENGTH 1024
+#define MAXUSERINPUTSIZE 2000
 
 
 void printIPAddress(char *msg, struct sockaddr *anAddress); // Print IPv4 address in string form
@@ -100,16 +101,22 @@ int main() {
 	struct sockaddr clientAddress; // client address information
 	socklen_t clientAddressLen;
 	
-	while(1) { // Accept Loop
-		clientAddressLen = sizeof clientAddress; 
-		newSocket = accept(welcomeSocket, (struct sockaddr*)&clientAddress, &clientAddressLen); 
-		if(newSocket == -1) {
-			perror("Error on Accept");
-			exit(EXIT_FAILURE); 
-		}
-        printIPAddress("Client IP Address", &clientAddress); 
-        
+	
+	clientAddressLen = sizeof clientAddress; 
+	newSocket = accept(welcomeSocket, (struct sockaddr*)&clientAddress, &clientAddressLen); 
+	if(newSocket == -1) {
+		perror("Error on Accept");
+		exit(EXIT_FAILURE); 
 	}
+	printIPAddress("Client IP Address", &clientAddress); 
+	
+	char client_message[MAXUSERINPUTSIZE];
+	int read_size;
+	while( (read_size = recv(newSocket , client_message , MAXUSERINPUTSIZE , 0)) > 0 ) {
+		client_message[read_size] = '\0';
+		printf("Client msg: %s", client_message); 
+    }
+	
 	
 	
 	
