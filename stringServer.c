@@ -114,7 +114,7 @@ int main() {
 	int read_size;
 	while( (read_size = recv(newSocket , client_message , MAXUSERINPUTSIZE , 0)) > 0 ) {
 		client_message[read_size] = '\0';
-		printf("Client msg: %s", client_message); 
+		printf("Client msg: %s\n", client_message); 
     }
 	
 	

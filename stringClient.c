@@ -22,6 +22,7 @@ void printIPAddress(char *msg, struct sockaddr *anAddress); // Print IPv4 addres
 int sendAll(int sockfd, char * buff);
 void * addUserInputToQueue();
 void * sendToServer(void * sockfd);
+void clean(char *var);
 
 /* ---------------------------------------------------------------------- */
 /* -------------------------- THREADS AND LOCKS ------------------------- */
@@ -98,13 +99,6 @@ int main()
 
 	/* --------------------- SEND AND RECV ------------------ */
 	
-	//~ char buffer[1024];
-	//~ while( fgets(buffer, 1024, stdin) != NULL) {
-		//~ int len = sizeof buffer;
-		//~ if( sendAll(sockfd, buffer, &len) == -1) {
-			//~ printf("Only sent %d bytes because of error\n", len);
-		//~ } 
-	//~ }
 	
 	pthread_t userInputHandlerThread, serverCommThread;
 	status = pthread_create( &userInputHandlerThread, NULL, addUserInputToQueue, NULL);
@@ -162,13 +156,13 @@ void * sendToServer(void * sockfd) {
 	for(;;) { // forever
 		if(!STAILQ_EMPTY(bufferQHead)) {
 			char textToSend[MAXUSERINPUTSIZE];
-			int len = strlen(np->text);
-			strncpy(textToSend, np->text, len); 
+			clean(textToSend); 
+			strncpy(textToSend, np->text, strlen(np->text));
 			int * sock = (int *)sockfd;
 			int asock = *sock;
 			sendAll(asock, textToSend);
 			pthread_mutex_lock(&queueMutex); // lock
-				STAILQ_REMOVE_HEAD(bufferQHead, next); 
+			STAILQ_REMOVE_HEAD(bufferQHead, next); 
 			pthread_mutex_unlock(&queueMutex); //unlock
 		}
 	}
@@ -189,3 +183,16 @@ int sendAll(int sockfd, char * buff) {
 	}
 	return n==-1?-1:0;
 }
+
+
+
+
+// Empties character
+void clean(char *var) {
+    int i = 0;
+    while(var[i] != '\0') {
+        var[i] = '\0';
+        i++;
+    }
+}
+
