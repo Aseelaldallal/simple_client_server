@@ -158,9 +158,7 @@ void * sendToServer(void * sockfd) {
 			char textToSend[MAXUSERINPUTSIZE];
 			clean(textToSend); 
 			strncpy(textToSend, np->text, strlen(np->text));
-			int * sock = (int *)sockfd;
-			int asock = *sock;
-			sendAll(asock, textToSend);
+			sendAll(*((int *)sockfd), textToSend);
 			pthread_mutex_lock(&queueMutex); // lock
 			STAILQ_REMOVE_HEAD(bufferQHead, next); 
 			pthread_mutex_unlock(&queueMutex); //unlock
@@ -171,12 +169,30 @@ void * sendToServer(void * sockfd) {
 
 // Send all of buff through sockfd
 int sendAll(int sockfd, char * buff) {
+	
+	unsigned char textLengthBuffer[4];
+	unsigned int textLength = strlen(buff);
+	memcpy(textLengthBuffer, (char*)&textLength, 4); 
+	
+	int msgLength = 4 + textLength;
+	char msg[msgLength];
+	
+	int i;
+	for(i=0; i<4; i++) {
+		msg[i] = textLengthBuffer[i];
+	}
+	
+	int j=0;
+	for(i=4; i<msgLength; i++) {
+		msg[i] = buff[j++];
+	}
+	
 	int n;
-	int totalBytesToSend = strlen(buff);
+	int totalBytesToSend = sizeof(msg);
 	int bytesSent = 0;
 	int bytesRemaining = totalBytesToSend;
 	while(bytesSent < totalBytesToSend) {
-		n = send(sockfd, buff + bytesSent, bytesRemaining, 0);
+		n = send(sockfd, msg + bytesSent, bytesRemaining, 0);
 		if( n == -1 ) { break; }
 		bytesSent += n;
 		bytesRemaining -=n;
