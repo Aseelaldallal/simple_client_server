@@ -203,7 +203,7 @@ int sendAll(int sockfd, char * buff) {
 
 
 
-// Empties character
+// Empties string
 void clean(char *var) {
     int i = 0;
     while(var[i] != '\0') {

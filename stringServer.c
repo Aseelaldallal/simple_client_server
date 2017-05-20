@@ -27,8 +27,8 @@
 void printIPAddress(char *msg, struct sockaddr *anAddress); // Print IPv4 address in string form
 void printMachineName(); // print name of machine server is running on
 void printPortNumber(int aSocket); // print port number associated with aSocket
-
-
+int recieveAll(int clientSocket);
+int getMsg(int clientSocket, char * msgLengthBuff, int length, int flags);
 /* ---------------------------------------------------------------------- */
 /* -------------------------------- MAIN -------------------------------- */
 /* ---------------------------------------------------------------------- */
@@ -110,16 +110,9 @@ int main() {
 	}
 	printIPAddress("Client IP Address", &clientAddress); 
 	
-	char client_message[MAXUSERINPUTSIZE];
-	int read_size;
-	while( (read_size = recv(newSocket , client_message , MAXUSERINPUTSIZE , 0)) > 0 ) {
-		client_message[read_size] = '\0';
-		printf("ReadSize: %d\n", read_size); 
-		printf("Client msg: %s\n", client_message); 
-    }
+
 	
-	
-	
+	recieveAll(newSocket); 
 	
 	
 	
@@ -170,5 +163,35 @@ void printPortNumber(int aSocket) {
        exit(EXIT_FAILURE); 
     }
     printf("SERVER_PORT %d\n", (int) ntohs(sockAddressInfo.sin_port));
+}
+
+/* Recieve Client Message. Need to implement error handling -- what if getMsg = -1 */
+int recieveAll(int clientSocket) {
+	char msgLengthBuff[4];
+    int msgLength = getMsg(clientSocket, msgLengthBuff, 4, MSG_PEEK); 
+    char msg[4 + msgLength];
+    int totalRecieved = getMsg(clientSocket, msg, 4 + msgLength, 0);
+    return 0;
+}
+
+
+/* Recieves length bytes from clientSocket. Stores them in msgBuff. Returns
+ * the length. If flags set to MSG_PEEK, data is returned but not consumed
+ * Returns -1 on error */
+int getMsg(int clientSocket, char * msgBuff, int length, int flags) {
+	int n;
+    int totalBytesExpected = length;
+    int bytesRecieved = 0;
+    int bytesRemaining = totalBytesExpected;
+    while( bytesRecieved < totalBytesExpected ) {
+		n = recv(clientSocket, msgBuff, length, flags);
+		if( n == -1 ) { break; }
+		bytesRecieved += n;
+		bytesRemaining -=n;
+	}
+	int msgLength;
+	int *ml = &msgLength;
+	memcpy(ml, msgBuff, 4); 
+    return n==-1?-1:msgLength;
 }
 
