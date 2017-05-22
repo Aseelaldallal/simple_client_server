@@ -21,8 +21,12 @@
 void printIPAddress(char *msg, struct sockaddr *anAddress); // Print IPv4 address in string form
 int sendAll(int sockfd, char * buff);
 void * addUserInputToQueue();
-void * sendToServer(void * sockfd);
+void * sendAndReceive(void * sockfd);
 void clean(char *var);
+int receive(int clientSocket, char **msg);
+int getMsgLength(int clientSocket);
+int getMsg(int clientSocket, char * msgBuff, int numBytesToReceive);
+char *unpack(char *msgWithLength, int headerSize, int totalLength);
 
 /* ---------------------------------------------------------------------- */
 /* -------------------------- THREADS AND LOCKS ------------------------- */
@@ -107,7 +111,7 @@ int main()
         exit(EXIT_FAILURE);
     }
     
-    status = pthread_create( &serverCommThread, NULL, sendToServer, &sockfd);
+    status = pthread_create( &serverCommThread, NULL, sendAndReceive, &sockfd);
 	if (status != 0){
 		printf("ERROR; return code from pthread_create() is %d\n", status);
         exit(EXIT_FAILURE);
@@ -142,6 +146,10 @@ void printIPAddress(char *msg, struct sockaddr *anAddress) {
 void * addUserInputToQueue() {
 	char input[MAXUSERINPUTSIZE];
 	while( fgets(input, MAXUSERINPUTSIZE, stdin) != NULL) {
+		strtok(input, "\n"); // remove newline char
+		if(strlen(input) == 1) {
+			continue; // dont send an empty line
+		}
 		pthread_mutex_lock(&queueMutex); // lock
 			np = malloc(sizeof(BufferEntry));
 			strcpy(np->text, input); 
@@ -152,7 +160,7 @@ void * addUserInputToQueue() {
 }
 
 // Keep on sending queue elements to server
-void * sendToServer(void * sockfd) {
+void * sendAndReceive(void * sockfd) {
 	for(;;) { // forever
 		if(!STAILQ_EMPTY(bufferQHead)) {
 			char textToSend[MAXUSERINPUTSIZE];
@@ -162,31 +170,35 @@ void * sendToServer(void * sockfd) {
 			pthread_mutex_lock(&queueMutex); // lock
 			STAILQ_REMOVE_HEAD(bufferQHead, next); 
 			pthread_mutex_unlock(&queueMutex); //unlock
-		}
-	}
+			int n;
+			char msgBuff[4];
+			n = recv(*((int *)sockfd), msgBuff, 4, MSG_PEEK);
+			if( n > 0 ) {
+				char *msg;
+				int numBytes = receive(*((int *)sockfd), &msg); 
+				printf("Recieved numbytes: %d\n", numBytes);
+				printf("msg: %s\n", msg); 
+			}
+		} // End if
+	} // End for
 }
 
 
 // Send all of buff through sockfd
 int sendAll(int sockfd, char * buff) {
-	
 	unsigned char textLengthBuffer[4];
 	unsigned int textLength = strlen(buff);
 	memcpy(textLengthBuffer, (char*)&textLength, 4); 
-	
 	int msgLength = 4 + textLength;
 	char msg[msgLength];
-	
 	int i;
 	for(i=0; i<4; i++) {
 		msg[i] = textLengthBuffer[i];
 	}
-	
 	int j=0;
 	for(i=4; i<msgLength; i++) {
 		msg[i] = buff[j++];
 	}
-	
 	int n;
 	int totalBytesToSend = sizeof(msg);
 	int bytesSent = 0;
@@ -200,9 +212,6 @@ int sendAll(int sockfd, char * buff) {
 	return n==-1?-1:0;
 }
 
-
-
-
 // Empties string
 void clean(char *var) {
     int i = 0;
@@ -212,3 +221,77 @@ void clean(char *var) {
     }
 }
 
+/* Recieve Client Message. Returns 0 if client closed connection, -1 on error, length of msg received */
+/*msg contains client message, not complete */
+int receive(int clientSocket, char **msg) {
+    int msgLength = getMsgLength(clientSocket); 
+    printf("MsgLength: %d\n", msgLength); 
+    if(msgLength == -1 || msgLength ==0) { return msgLength; }
+    char msgWithLength[4 + msgLength];
+    int totalReceived = getMsg(clientSocket, msgWithLength, 4 + msgLength);
+    printf("TotalReceived: %d\n", totalReceived); 
+    if (totalReceived == -1) { return -1; }
+    if (totalReceived == 0 ) { printf("This is not supposed to happen!\n"); }
+    //~ *msg = malloc(msgLength);  // free msg
+    //~ printf("MsgLength: %d\n", msgLength); 
+    //~ strncpy(*msg, unpack(msgWithLength, 4, 4+msgLength),msgLength); 
+    //~ printf("In Recieve: This is msg: %s\n", *msg); 
+    *msg = unpack(msgWithLength, 4, 4+msgLength);
+    return totalReceived;
+}
+
+/* Unpacks: removes header from msgWithLength */
+char *unpack(char *msgWithLength, int headerSize, int totalLength) {
+	printf("---Unpack---\n"); 
+	int textLength = totalLength - headerSize;
+	printf("Text Length: %d\n", textLength); 
+	char *msg = malloc(sizeof(char) * textLength);
+	int j=0;
+	for(int i=headerSize; i<totalLength;i++) {
+		msg[j] = msgWithLength[i];
+		printf("Msg[%d]: %c\n", j, msg[j]); 
+		j++;
+	}
+	printf("IN unpack: size of msg: %lu\n", sizeof(msg));
+	printf("IN unpack: len of msg: %lu\n", strlen(msg));
+	printf("---Exit upack---\n"); 
+	return msg;
+}
+
+/* Gets length of message*/
+int getMsgLength(int clientSocket) {
+	int n;
+    int totalBytesExpected = 4;
+    int bytesReceived = 0;
+    int bytesRemaining = totalBytesExpected;
+    char msgBuff[4];
+	while( bytesReceived < totalBytesExpected ) {
+		n = recv(clientSocket, msgBuff, totalBytesExpected, MSG_PEEK);
+		if( n == -1 ) { return -1; } // Error
+		if( n == 0  ) { return 0;  } // client closed connection
+		bytesReceived += n;
+		bytesRemaining -=n;
+	}
+	int msgLength;
+	int *ml = &msgLength;
+	memcpy(ml, msgBuff, 4); 
+    return msgLength;
+}
+
+/* Receives length bytes from clientSocket. Stores them in msgBuff. Returns
+ * the length. If flags set to MSG_PEEK, data is returned but not consumed
+ * Returns -1 on error, 0 if client closed connection, msgLength otherwise */
+int getMsg(int clientSocket, char * msgBuff, int numBytesToReceive) {
+	int n;
+    int totalBytesExpected = numBytesToReceive;
+    int bytesReceived = 0;
+    int bytesRemaining = totalBytesExpected;
+    while( bytesReceived < totalBytesExpected ) {
+		n = recv(clientSocket, msgBuff, numBytesToReceive, 0);
+		if( n == -1 ) { return -1; } // Error
+		if( n == 0  ) { return 0;  } // client closed connection - this shouldn't happen
+		bytesReceived += n;
+		bytesRemaining -=n;
+	}
+	return bytesReceived;
+}
