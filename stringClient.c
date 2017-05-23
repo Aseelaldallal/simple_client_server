@@ -39,15 +39,22 @@ pthread_mutex_t queueMutex;
 /* ---------------------------------------------------------------------- */
 
 typedef struct BufferEntry {
-	STAILQ_ENTRY(BufferEntry) next;
+	STAILQ_ENTRY(BufferEntry) entries;
 	char text[MAXUSERINPUTSIZE];
 } BufferEntry;
 
 typedef STAILQ_HEAD(BufferQueueHead, BufferEntry) BufferQueueHead;
 
-BufferEntry *np, *prevp;
+BufferEntry *np;
 BufferQueueHead *bufferQHead;
 	
+/* ---------------------------------------------------------------------- */
+/* ---------------------------- OTHER GLOBAL ---------------------------- */
+/* ---------------------------------------------------------------------- */
+
+int numMsgsToSend = 0;
+int numMsgsRecieved = 0;
+
 /* ---------------------------------------------------------------------- */
 /* -------------------------------- MAIN -------------------------------- */
 /* ---------------------------------------------------------------------- */
@@ -97,15 +104,13 @@ int main()
         exit(EXIT_FAILURE);
     }
 
-	printIPAddress("Server IP", (struct sockaddr *)looper->ai_addr); 
-
     freeaddrinfo(serverInfo); 
 
 	/* --------------------- SEND AND RECV ------------------ */
 	
 	
 	pthread_t userInputHandlerThread, serverCommThread;
-	status = pthread_create( &userInputHandlerThread, NULL, addUserInputToQueue, NULL);
+	status = pthread_create( &userInputHandlerThread, NULL, addUserInputToQueue, &sockfd);
 	if (status != 0){
 		printf("ERROR; return code from pthread_create() is %d\n", status);
         exit(EXIT_FAILURE);
@@ -117,12 +122,7 @@ int main()
         exit(EXIT_FAILURE);
     }
     
-	for(;;) { // forever
-		
-
-	}
-
-
+	for(;;) {}
 	/* ------------------------- CLOSE ---------------------- */
 
     close(sockfd);
@@ -143,42 +143,52 @@ void printIPAddress(char *msg, struct sockaddr *anAddress) {
 }
 
 // Keep on getting user input
-void * addUserInputToQueue() {
+void * addUserInputToQueue(void * sockfd) {
 	char input[MAXUSERINPUTSIZE];
 	while( fgets(input, MAXUSERINPUTSIZE, stdin) != NULL) {
 		strtok(input, "\n"); // remove newline char
-		if(strlen(input) == 1) {
+		if(strlen(input) == 1 && input[0] == '\n') {
 			continue; // dont send an empty line
 		}
 		pthread_mutex_lock(&queueMutex); // lock
 			np = malloc(sizeof(BufferEntry));
 			strcpy(np->text, input); 
-			STAILQ_INSERT_TAIL(bufferQHead, np, next);
+			STAILQ_INSERT_TAIL(bufferQHead, np, entries);
+			numMsgsToSend++;
 		pthread_mutex_unlock(&queueMutex); //unlock
 	}
+	// Get here when fgets is null
+    while(numMsgsToSend!=numMsgsRecieved) {} // do nothing 
+	close(*((int *)sockfd)); 
 	return 0;
 }
 
 // Keep on sending queue elements to server
-void * sendAndReceive(void * sockfd) {
+void * sendAndReceive(void * sockfd) { 
 	for(;;) { // forever
-		if(!STAILQ_EMPTY(bufferQHead)) {
+		pthread_mutex_lock(&queueMutex); // lock
+			int isEmpty = STAILQ_EMPTY(bufferQHead); // Returns 1 if empty, 0 if not empty. 
+		pthread_mutex_unlock(&queueMutex); //unlock
+		if(isEmpty == 0) { // if queue is not empty
 			char textToSend[MAXUSERINPUTSIZE];
 			clean(textToSend); 
-			strncpy(textToSend, np->text, strlen(np->text));
-			sendAll(*((int *)sockfd), textToSend);
 			pthread_mutex_lock(&queueMutex); // lock
-			STAILQ_REMOVE_HEAD(bufferQHead, next); 
+				BufferEntry *first= STAILQ_FIRST(bufferQHead);
+				strncpy(textToSend, first->text, strlen(np->text));
+				sendAll(*((int *)sockfd), textToSend);
+				STAILQ_REMOVE_HEAD(bufferQHead, entries); 
+				free(first); 
 			pthread_mutex_unlock(&queueMutex); //unlock
 			int n;
 			char msgBuff[4];
 			n = recv(*((int *)sockfd), msgBuff, 4, MSG_PEEK);
 			if( n > 0 ) {
 				char *msg;
-				int numBytes = receive(*((int *)sockfd), &msg); 
-				printf("Recieved numbytes: %d\n", numBytes);
-				printf("msg: %s\n", msg); 
-			}
+				receive(*((int *)sockfd), &msg); 
+				numMsgsRecieved++;
+				printf("Server: %s\n", msg); 
+			} 
+			sleep(2);
 		} // End if
 	} // End for
 }
@@ -225,36 +235,24 @@ void clean(char *var) {
 /*msg contains client message, not complete */
 int receive(int clientSocket, char **msg) {
     int msgLength = getMsgLength(clientSocket); 
-    printf("MsgLength: %d\n", msgLength); 
     if(msgLength == -1 || msgLength ==0) { return msgLength; }
     char msgWithLength[4 + msgLength];
     int totalReceived = getMsg(clientSocket, msgWithLength, 4 + msgLength);
-    printf("TotalReceived: %d\n", totalReceived); 
     if (totalReceived == -1) { return -1; }
     if (totalReceived == 0 ) { printf("This is not supposed to happen!\n"); }
-    //~ *msg = malloc(msgLength);  // free msg
-    //~ printf("MsgLength: %d\n", msgLength); 
-    //~ strncpy(*msg, unpack(msgWithLength, 4, 4+msgLength),msgLength); 
-    //~ printf("In Recieve: This is msg: %s\n", *msg); 
     *msg = unpack(msgWithLength, 4, 4+msgLength);
     return totalReceived;
 }
 
 /* Unpacks: removes header from msgWithLength */
 char *unpack(char *msgWithLength, int headerSize, int totalLength) {
-	printf("---Unpack---\n"); 
 	int textLength = totalLength - headerSize;
-	printf("Text Length: %d\n", textLength); 
 	char *msg = malloc(sizeof(char) * textLength);
 	int j=0;
 	for(int i=headerSize; i<totalLength;i++) {
 		msg[j] = msgWithLength[i];
-		printf("Msg[%d]: %c\n", j, msg[j]); 
 		j++;
 	}
-	printf("IN unpack: size of msg: %lu\n", sizeof(msg));
-	printf("IN unpack: len of msg: %lu\n", strlen(msg));
-	printf("---Exit upack---\n"); 
 	return msg;
 }
 

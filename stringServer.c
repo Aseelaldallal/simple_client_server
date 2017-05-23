@@ -119,7 +119,6 @@ int main() {
         for(int i = 0; i <= fdmax; i++) {
             if (FD_ISSET(i, &readfds)) { 
                 if (i == welcomeSocket) {
-					printf("Incoming connection\n");
 					int newSocket; // New connections
 					struct sockaddr clientAddress; // client address information
 					socklen_t clientAddressLen;
@@ -133,30 +132,22 @@ int main() {
 					if (newSocket > fdmax) {    // keep track of the max
 						fdmax = newSocket;
 					}
-					printf("%d: Connection Established\n", newSocket); 
-					printIPAddress("IP ", &clientAddress); 
                 } else { // handle data from a client
-					printf("Socket %d: Ready to read\n", i);
 					char *msg;
                     int numBytes = receive(i, &msg); 
-                    printf("Main loop: Num Bytes Recieved: %d\n", numBytes); 
 					if( numBytes <= 0 ) {
 						if( numBytes == -1 ) {
 							perror("error on receive");
 							exit(EXIT_FAILURE); 
 						}
-						printf("Closing Connection on socket %d\n", i); 
 						close(i);
 						FD_CLR(i, &master); 
-					} else { // we got some data from a client
-                        printf("%d: Got data from client\n", i); 
-                        printf("%d msg: %s\n", i, msg);
-                        printf("Length of msg: %lu\n", strlen(msg)); 
+					} else { 
                         convertToTitleCase(&msg); 
-                        printf("title case: %s\n", msg);
-                        printf("Length of msg: %lu\n", strlen(msg)); 
-                        sendAll(i, msg);
-                        // need error checking here
+                        int n = sendAll(i, msg);
+                        if(n == -1) {
+							printf("error on send\n"); 
+						}
                     }
                 } // END handle data from client
             } // END got new incoming connection
@@ -208,36 +199,24 @@ void printPortNumber(int aSocket) {
 /*msg contains client message, not complete */
 int receive(int clientSocket, char **msg) {
     int msgLength = getMsgLength(clientSocket); 
-    printf("MsgLength: %d\n", msgLength); 
     if(msgLength == -1 || msgLength ==0) { return msgLength; }
     char msgWithLength[4 + msgLength];
     int totalReceived = getMsg(clientSocket, msgWithLength, 4 + msgLength);
-    printf("TotalReceived: %d\n", totalReceived); 
     if (totalReceived == -1) { return -1; }
     if (totalReceived == 0 ) { printf("This is not supposed to happen!\n"); }
-    //~ *msg = malloc(msgLength);  // free msg
-    //~ printf("MsgLength: %d\n", msgLength); 
-    //~ strncpy(*msg, unpack(msgWithLength, 4, 4+msgLength),msgLength); 
-    //~ printf("In Recieve: This is msg: %s\n", *msg); 
     *msg = unpack(msgWithLength, 4, 4+msgLength);
     return totalReceived;
 }
 
 /* Unpacks: removes header from msgWithLength */
 char *unpack(char *msgWithLength, int headerSize, int totalLength) {
-	printf("---Unpack---\n"); 
 	int textLength = totalLength - headerSize;
-	printf("Text Length: %d\n", textLength); 
 	char *msg = malloc(sizeof(char) * textLength);
 	int j=0;
 	for(int i=headerSize; i<totalLength;i++) {
 		msg[j] = msgWithLength[i];
-		printf("Msg[%d]: %c\n", j, msg[j]); 
 		j++;
 	}
-	printf("IN unpack: size of msg: %lu\n", sizeof(msg));
-	printf("IN unpack: len of msg: %lu\n", strlen(msg));
-	printf("---Exit upack---\n"); 
 	return msg;
 }
 
@@ -271,6 +250,7 @@ int getMsg(int clientSocket, char * msgBuff, int numBytesToReceive) {
     int bytesRemaining = totalBytesExpected;
     while( bytesReceived < totalBytesExpected ) {
 		n = recv(clientSocket, msgBuff, numBytesToReceive, 0);
+		printf("%s\n", msgBuff); 
 		if( n == -1 ) { return -1; } // Error
 		if( n == 0  ) { return 0;  } // client closed connection - this shouldn't happen
 		bytesReceived += n;
@@ -282,10 +262,7 @@ int getMsg(int clientSocket, char * msgBuff, int numBytesToReceive) {
 
 /* Converts  msg to title case */
 int convertToTitleCase(char ** msg) {
-	//*msg = "a";
-	printf("In Convert to titlecase: length: %lu\n", strlen(*msg)); 
 	for(int i=0; i<strlen(*msg); i++) {
-	    //printf("Msg[%d]: %c\n", i, (*msg)[i]); 
 	    if(i == 0 || (*msg)[i-1] == ' ') {
 	        if( (*msg)[i] >= 'a' && (*msg)[i] <= 'z' ) {
 				(*msg)[i] -= 32;
@@ -300,7 +277,6 @@ int convertToTitleCase(char ** msg) {
 
 // Send all of buff through sockfd
 int sendAll(int sockfd, char * buff) {
-	printf("IN SEND ALL"); 
 	unsigned char textLengthBuffer[4];
 	unsigned int textLength = strlen(buff);
 	memcpy(textLengthBuffer, (char*)&textLength, 4); 
@@ -311,12 +287,9 @@ int sendAll(int sockfd, char * buff) {
 		msg[i] = textLengthBuffer[i];
 	}
 	int j=0;
-	printf("Msg to send: "); 
 	for(i=4; i<msgLength; i++) {
 		msg[i] = buff[j++];
-		printf("%c", msg[i]);
 	}
-	printf("\n"); 
 	int n;
 	int totalBytesToSend = sizeof(msg);
 	int bytesSent = 0;
